@@ -4,7 +4,7 @@ go:
   - 1.8
 sudo: false
 install:
-  - go get github.com/bmizerany/assert
+  - go get github.com/hahow/json2csv
 notifications:
   email: false
 

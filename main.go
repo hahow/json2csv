@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
-	"strings"
 	"unicode/utf8"
+	"github.com/thoas/go-funk"
 )
 
 type LineReader interface {
@@ -63,24 +62,9 @@ func main() {
 	json2csv(reader, writer, keys, *printHeader)
 }
 
-func get_value(data map[string]interface{}, keyparts []string) string {
-	if len(keyparts) > 1 {
-		subdata, _ := data[keyparts[0]].(map[string]interface{})
-		return get_value(subdata, keyparts[1:])
-	} else if v, ok := data[keyparts[0]]; ok {
-		switch v.(type) {
-		case nil:
-			return ""
-		case float64:
-			f, _ := v.(float64)
-			if math.Mod(f, 1.0) == 0.0 {
-				return fmt.Sprintf("%d", int(f))
-			} else {
-				return fmt.Sprintf("%f", f)
-			}
-		default:
-			return fmt.Sprintf("%+v", v)
-		}
+func get_value(data []interface{}, index int) string {
+	if index < len(data) {
+		return data[index].(string)
 	}
 
 	return ""
@@ -89,12 +73,8 @@ func get_value(data map[string]interface{}, keyparts []string) string {
 func json2csv(r LineReader, w *csv.Writer, keys []string, printHeader bool) {
 	var line []byte
 	var err error
+	var index_of_keys []int
 	line_count := 0
-
-	var expanded_keys [][]string
-	for _, key := range keys {
-		expanded_keys = append(expanded_keys, strings.Split(key, "."))
-	}
 
 	for {
 		if err == io.EOF {
@@ -108,6 +88,19 @@ func json2csv(r LineReader, w *csv.Writer, keys []string, printHeader bool) {
 			}
 		}
 		line_count++
+		if (line_count == 1) {
+			for _, key := range keys {
+				var keys_data []interface{}
+				err = json.Unmarshal(line, &keys_data)
+				if err != nil {
+					log.Printf("ERROR Decoding JSON at line %d: %s\n%s", line_count, err, line)
+					continue
+				}
+				index := funk.IndexOf(keys_data, key)
+				index_of_keys = append(index_of_keys, index)
+			}
+			continue
+		}
 		if len(line) == 0 {
 			continue
 		}
@@ -118,7 +111,7 @@ func json2csv(r LineReader, w *csv.Writer, keys []string, printHeader bool) {
 			printHeader = false
 		}
 
-		var data map[string]interface{}
+		var data []interface{}
 		err = json.Unmarshal(line, &data)
 		if err != nil {
 			log.Printf("ERROR Decoding JSON at line %d: %s\n%s", line_count, err, line)
@@ -126,8 +119,8 @@ func json2csv(r LineReader, w *csv.Writer, keys []string, printHeader bool) {
 		}
 
 		var record []string
-		for _, expanded_key := range expanded_keys {
-			record = append(record, get_value(data, expanded_key))
+		for _, index := range index_of_keys {
+			record = append(record, get_value(data, index))
 		}
 
 		w.Write(record)
